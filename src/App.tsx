@@ -16,6 +16,9 @@ import { CSS } from '@dnd-kit/utilities'
 import type { Card, State } from './types'
 import { loadState, saveState, initialState, uid } from './store'
 import { fileToDataUrl } from './image'
+import confetti from 'canvas-confetti'
+import { sounds, unlockAudio } from './sound'
+import TierLabel from './TierLabel'
 
 const POOL = 'pool'
 
@@ -31,17 +34,25 @@ function CardFace({ card }: { card: Card }) {
   )
 }
 
-function SortableCard({ card }: { card: Card }) {
+type DropFx = { id: string; kind: 'first' | 'last' | 'mid'; n: number }
+
+function SortableCard({ card, fx }: { card: Card; fx: DropFx | null }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: card.id })
   return (
     <div
       ref={setNodeRef}
-      className="card flex items-center justify-center overflow-hidden"
+      data-card-id={card.id}
+      className="touch-none"
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.3 : 1 }}
       {...attributes}
       {...listeners}
     >
-      <CardFace card={card} />
+      <div
+        key={fx ? fx.n : 0}
+        className={`card flex items-center justify-center overflow-hidden ${fx ? (fx.kind === 'last' ? 'fx-sad' : 'fx-bounce') : ''}`}
+      >
+        <CardFace card={card} />
+      </div>
     </div>
   )
 }
@@ -53,11 +64,13 @@ function Zone({
   cardIds,
   cards,
   empty,
+  fx,
   className = '',
 }: {
   id: string
   cardIds: string[]
   cards: Record<string, Card>
+  fx: DropFx | null
   empty: React.ReactNode
   className?: string
 }) {
@@ -68,7 +81,7 @@ function Zone({
         ref={setNodeRef}
         className={`flex flex-wrap content-start items-center gap-2.5 p-3 transition-colors ${isOver ? 'drop-over' : ''} ${className}`}
       >
-        {cardIds.map((cid) => cards[cid] && <SortableCard key={cid} card={cards[cid]} />)}
+        {cardIds.map((cid) => cards[cid] && <SortableCard key={cid} card={cards[cid]} fx={fx?.id === cid ? fx : null} />)}
         {cardIds.length === 0 && (
           <span className="select-none text-sm text-[color:var(--ink-soft)] opacity-70">{empty}</span>
         )}
@@ -85,6 +98,9 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null)
   const [text, setText] = useState('')
   const [fileOver, setFileOver] = useState(false)
+  const [fx, setFx] = useState<DropFx | null>(null)
+  const stateRef = useRef(state)
+  stateRef.current = state
   const fileRef = useRef<HTMLInputElement>(null)
   const toastTimer = useRef<number>(0)
 
@@ -160,6 +176,38 @@ export default function App() {
       ? { ...s, pool: list }
       : { ...s, tiers: s.tiers.map((t) => (t.id === cid ? { ...t, cardIds: list } : t)) }
 
+  // audio can only start after a user gesture
+  useEffect(() => {
+    window.addEventListener('pointerdown', unlockAudio, { once: true })
+    return () => window.removeEventListener('pointerdown', unlockAudio)
+  }, [])
+
+  const playDropFx = (cardId: string) => {
+    const s = stateRef.current
+    const cid = containerOf(s, cardId)
+    if (!cid) return
+    const idx = s.tiers.findIndex((t) => t.id === cid)
+    const kind: DropFx['kind'] = idx === 0 ? 'first' : idx === s.tiers.length - 1 ? 'last' : 'mid'
+    setFx((prev) => ({ id: cardId, kind, n: (prev?.n ?? 0) + 1 }))
+    if (!s.muted) (kind === 'first' ? sounds.win : kind === 'last' ? sounds.sad : sounds.pop)()
+    if (kind === 'first') {
+      // wait for the card to land, then burst from its position
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          const r = document.querySelector(`[data-card-id="${cardId}"]`)?.getBoundingClientRect()
+          if (!r) return
+          confetti({
+            particleCount: 90,
+            spread: 80,
+            startVelocity: 35,
+            origin: { x: (r.left + r.width / 2) / innerWidth, y: (r.top + r.height / 2) / innerHeight },
+            disableForReducedMotion: true,
+          })
+        }),
+      )
+    }
+  }
+
   const onDragStart = (e: DragStartEvent) => setActiveId(String(e.active.id))
 
   const onDragOver = ({ active, over }: DragOverEvent) => {
@@ -192,6 +240,7 @@ export default function App() {
       if (from < 0 || to < 0 || from === to) return s
       return withList(s, c, arrayMove(list, from, to))
     })
+    playDropFx(aId)
   }
 
   const reset = () => {
@@ -214,6 +263,14 @@ export default function App() {
           aria-label="ชื่อ Tier List"
           className="font-display min-w-0 flex-1 rounded-xl border-2 border-transparent bg-transparent px-2 py-1 text-3xl font-semibold outline-none transition hover:border-[color:var(--line)] focus:border-[color:var(--accent)] focus:bg-[color:var(--surface)]"
         />
+        <button
+          onClick={() => setState((s) => ({ ...s, muted: !s.muted }))}
+          aria-label={state.muted ? 'เปิดเสียง' : 'ปิดเสียง'}
+          title={state.muted ? 'เปิดเสียง' : 'ปิดเสียง'}
+          className="rounded-full border-2 border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-1 text-lg transition hover:border-[color:var(--accent)]"
+        >
+          {state.muted ? '🔇' : '🔊'}
+        </button>
         <button
           onClick={reset}
           className="font-display rounded-full border-2 border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-1.5 text-sm font-medium text-[color:var(--ink-soft)] transition hover:border-[color:var(--accent)] hover:text-[color:var(--accent)]"
@@ -238,15 +295,21 @@ export default function App() {
           {state.tiers.map((tier, i) => (
             <div key={tier.id} className="flex border-b-2 border-[color:var(--line)] last:border-b-0">
               <div
-                className="font-display flex w-24 shrink-0 items-center justify-center p-2 text-center text-3xl font-semibold"
+                className="font-display flex w-24 shrink-0 select-none items-center justify-center p-2 text-center text-3xl font-semibold"
                 style={{ background: `var(${tierVars[i % 5]})`, color: 'var(--tier-ink)' }}
               >
-                {tier.label}
+                <TierLabel
+                  label={tier.label}
+                  onChange={(label) =>
+                    setState((s) => ({ ...s, tiers: s.tiers.map((t) => (t.id === tier.id ? { ...t, label } : t)) }))
+                  }
+                />
               </div>
               <Zone
                 id={tier.id}
                 cardIds={tier.cardIds}
                 cards={state.cards}
+                fx={fx}
                 empty="ลากการ์ดมาวางตรงนี้ ✨"
                 className="min-h-[88px] flex-1"
               />
@@ -304,6 +367,7 @@ export default function App() {
             id={POOL}
             cardIds={state.pool}
             cards={state.cards}
+            fx={fx}
             empty="การ์ดหมดแล้ว! 🎉 พิมพ์ข้อความ วางรูป หรือลากไฟล์รูปมาใส่เพิ่มได้เลย"
             className="min-h-[88px] rounded-xl"
           />

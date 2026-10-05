@@ -69,3 +69,34 @@ body {
   outline: 3px dashed var(--accent);
   outline-offset: -4px;
 }
+
+/* ---------- drop effects (animate the inner .card so dnd-kit's transform is untouched) ---------- */
+@keyframes bounce {
+  0% { transform: scale(0.8); }
+  45% { transform: scale(1.12); }
+  75% { transform: scale(0.96); }
+  100% { transform: scale(1); }
+}
+@keyframes sad {
+  0% { transform: translateY(-28px) scale(1.04); filter: saturate(0.2) brightness(0.95); }
+  30% { transform: translateY(0) scale(1.1, 0.86); filter: saturate(0.2) brightness(0.9); }
+  40% { transform: translateX(-5px); }
+  50% { transform: translateX(5px); }
+  60% { transform: translateX(-3px); }
+  70% { transform: translateX(3px); }
+  85% { transform: translateX(0) scale(1); filter: saturate(0.2) brightness(0.95); }
+  100% { transform: scale(1); filter: none; }
+}
+.fx-bounce { animation: bounce 450ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+.fx-sad { animation: sad 800ms ease-out; }
+
+@keyframes sad-calm {
+  0% { filter: saturate(0.2); }
+  85% { filter: saturate(0.2); }
+  100% { filter: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fx-bounce { animation: none; }
+  .fx-sad { animation: sad-calm 800ms linear; }
+  .card { transition: none; }
+}
