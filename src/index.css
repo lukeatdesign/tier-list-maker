@@ -1,0 +1,71 @@
+@import 'tailwindcss';
+
+:root,
+[data-theme='pastel'] {
+  --bg: #fff6ec;
+  --bg-dots: #ffe3cf;
+  --surface: #fffdf9;
+  --ink: #5b4a5e;
+  --ink-soft: #a08ea3;
+  --line: #f1dccb;
+  --accent: #ff8fab;
+  --accent-ink: #ffffff;
+  --tier-1: #ffadad;
+  --tier-2: #ffd6a5;
+  --tier-3: #fdffb6;
+  --tier-4: #caffbf;
+  --tier-5: #a0c4ff;
+  --tier-ink: #6b4a4a;
+  --card-bg: #ffffff;
+  --card-border: #f3e3d6;
+  --radius: 16px;
+  --shadow: 0 4px 0 rgba(214, 170, 140, 0.25), 0 10px 24px rgba(214, 170, 140, 0.18);
+  --shadow-card: 0 2px 0 rgba(214, 170, 140, 0.3), 0 4px 10px rgba(214, 170, 140, 0.15);
+  --font-display: 'Fredoka', 'Noto Sans Thai', sans-serif;
+  --font-body: 'Noto Sans Thai', 'Fredoka', sans-serif;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-body);
+  background-color: var(--bg);
+  background-image: radial-gradient(var(--bg-dots) 1.6px, transparent 1.6px);
+  background-size: 22px 22px;
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.card {
+  background: var(--card-bg);
+  border: 2px solid var(--card-border);
+  border-radius: calc(var(--radius) - 4px);
+  box-shadow: var(--shadow-card);
+  min-width: 64px;
+  height: 64px;
+  max-width: 160px;
+  touch-action: none;
+  user-select: none;
+  cursor: grab;
+}
+.card:hover {
+  filter: brightness(1.02);
+}
+.card.dragging-overlay {
+  cursor: grabbing;
+  transform: rotate(4deg) scale(1.08);
+  box-shadow: 0 12px 28px rgba(150, 100, 90, 0.3);
+}
+
+.drop-over {
+  outline: 3px dashed var(--accent);
+  outline-offset: -4px;
+}
