@@ -4,6 +4,8 @@ import {
   DragOverlay,
   PointerSensor,
   closestCenter,
+  pointerWithin,
+  type CollisionDetection,
   useDroppable,
   useSensor,
   useSensors,
@@ -24,6 +26,12 @@ import CardDialog from './CardDialog'
 import ConfirmDelete from './ConfirmDelete'
 
 const POOL = 'pool'
+
+// the row under the pointer wins, so a small nudge into a neighbouring tier is enough; fall back to nearest centre
+const collision: CollisionDetection = (args) => {
+  const hits = pointerWithin(args)
+  return hits.length ? hits : closestCenter(args)
+}
 
 /* ---------- card ---------- */
 
@@ -347,7 +355,7 @@ export default function App() {
     <div className="mx-auto max-w-5xl px-5 pb-16 pt-6">
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCenter}
+        collisionDetection={collision}
         onDragStart={onDragStart}
         onDragOver={onDragOver}
         onDragEnd={onDragEnd}
