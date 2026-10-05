@@ -23,6 +23,8 @@ export function initialState(): State {
 }
 
 export function loadState(): State {
+  const shared = stateFromHash()
+  if (shared) return shared
   try {
     const raw = localStorage.getItem(KEY)
     if (raw) {
@@ -42,5 +44,18 @@ export function saveState(s: State): boolean {
     return true
   } catch {
     return false
+  }
+}
+
+/** a shared link carries a whole board: https://…/#s=<base64url of the State JSON> */
+function stateFromHash(): State | null {
+  const m = location.hash.match(/^#s=([\w-]+)$/)
+  if (!m) return null
+  try {
+    const bin = atob(m[1].replace(/-/g, '+').replace(/_/g, '/'))
+    const s = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)))) as State
+    return Array.isArray(s.tiers) && Array.isArray(s.pool) && s.cards ? s : null
+  } catch {
+    return null
   }
 }

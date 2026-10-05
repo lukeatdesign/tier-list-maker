@@ -145,6 +145,11 @@ export default function App() {
     toastTimer.current = window.setTimeout(() => setToast(null), 3200)
   }, [])
 
+  // a shared link (#s=…) is applied once, then the hash goes away so reloads keep later edits
+  useEffect(() => {
+    if (location.hash.startsWith('#s=')) history.replaceState(null, '', location.pathname + location.search)
+  }, [])
+
   // auto-save
   useEffect(() => {
     document.documentElement.dataset.theme = state.theme
