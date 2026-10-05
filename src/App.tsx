@@ -20,6 +20,7 @@ import confetti from 'canvas-confetti'
 import { toBlob, toPng } from 'html-to-image'
 import { sounds, unlockAudio } from './sound'
 import TierLabel from './TierLabel'
+import CardDialog from './CardDialog'
 
 const POOL = 'pool'
 
@@ -37,13 +38,14 @@ function CardFace({ card }: { card: Card }) {
 
 type DropFx = { id: string; kind: 'first' | 'last' | 'mid'; n: number }
 
-function SortableCard({ card, fx }: { card: Card; fx: DropFx | null }) {
+function SortableCard({ card, fx, onOpen }: { card: Card; fx: DropFx | null; onOpen: (id: string) => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: card.id })
   return (
     <div
       ref={setNodeRef}
       data-card-id={card.id}
       className="touch-none"
+      onClick={() => onOpen(card.id)}
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.3 : 1 }}
       {...attributes}
       {...listeners}
@@ -53,6 +55,7 @@ function SortableCard({ card, fx }: { card: Card; fx: DropFx | null }) {
         className={`card flex items-center justify-center overflow-hidden ${fx ? (fx.kind === 'last' ? 'fx-sad' : 'fx-bounce') : ''}`}
       >
         <CardFace card={card} />
+        {card.note && <span className="note-dot" title="มีโน้ต" />}
       </div>
     </div>
   )
@@ -66,12 +69,14 @@ function Zone({
   cards,
   empty,
   fx,
+  onOpen,
   className = '',
 }: {
   id: string
   cardIds: string[]
   cards: Record<string, Card>
   fx: DropFx | null
+  onOpen: (id: string) => void
   empty: React.ReactNode
   className?: string
 }) {
@@ -82,7 +87,7 @@ function Zone({
         ref={setNodeRef}
         className={`flex flex-wrap content-start items-center gap-2.5 p-3 transition-colors ${isOver ? 'drop-over' : ''} ${className}`}
       >
-        {cardIds.map((cid) => cards[cid] && <SortableCard key={cid} card={cards[cid]} fx={fx?.id === cid ? fx : null} />)}
+        {cardIds.map((cid) => cards[cid] && <SortableCard key={cid} card={cards[cid]} fx={fx?.id === cid ? fx : null} onOpen={onOpen} />)}
         {cardIds.length === 0 && (
           <span data-no-export className="select-none text-sm text-[color:var(--ink-soft)] opacity-70">{empty}</span>
         )}
@@ -100,6 +105,7 @@ export default function App() {
   const [text, setText] = useState('')
   const [fileOver, setFileOver] = useState(false)
   const [fx, setFx] = useState<DropFx | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const exportRef = useRef<HTMLDivElement>(null)
   const stateRef = useRef(state)
   stateRef.current = state
@@ -210,7 +216,36 @@ export default function App() {
     }
   }
 
-  const onDragStart = (e: DragStartEvent) => setActiveId(String(e.active.id))
+  // a click opens the card dialog; the click that ends a drag must not
+  const justDragged = useRef(false)
+  const openCard = (id: string) => {
+    if (!justDragged.current) setEditingId(id)
+  }
+  const endDrag = () => {
+    setActiveId(null)
+    window.setTimeout(() => (justDragged.current = false), 150)
+  }
+
+  const saveCard = (id: string, patch: Partial<Card>) =>
+    setState((s) => (s.cards[id] ? { ...s, cards: { ...s.cards, [id]: { ...s.cards[id], ...patch } } } : s))
+
+  const deleteCard = (id: string) => {
+    setEditingId(null)
+    setState((s) => {
+      const { [id]: _gone, ...cards } = s.cards
+      return {
+        ...s,
+        cards,
+        pool: s.pool.filter((x) => x !== id),
+        tiers: s.tiers.map((t) => ({ ...t, cardIds: t.cardIds.filter((x) => x !== id) })),
+      }
+    })
+  }
+
+  const onDragStart = (e: DragStartEvent) => {
+    justDragged.current = true
+    setActiveId(String(e.active.id))
+  }
 
   const onDragOver = ({ active, over }: DragOverEvent) => {
     if (!over) return
@@ -229,7 +264,7 @@ export default function App() {
   }
 
   const onDragEnd = ({ active, over }: DragEndEvent) => {
-    setActiveId(null)
+    endDrag()
     if (!over) return
     const aId = String(active.id)
     const oId = String(over.id)
@@ -297,7 +332,7 @@ export default function App() {
         onDragStart={onDragStart}
         onDragOver={onDragOver}
         onDragEnd={onDragEnd}
-        onDragCancel={() => setActiveId(null)}
+        onDragCancel={endDrag}
       >
       {/* export area = title + board; anything with data-no-export is skipped */}
       <div ref={exportRef} className="p-4">
@@ -309,8 +344,29 @@ export default function App() {
           value={state.title}
           onChange={(e) => setState((s) => ({ ...s, title: e.target.value }))}
           aria-label="ชื่อ Tier List"
-          className="font-display min-w-0 flex-1 rounded-xl border-2 border-transparent bg-transparent px-2 py-1 text-3xl font-semibold outline-none transition hover:border-[color:var(--line)] focus:border-[color:var(--accent)] focus:bg-[color:var(--surface)]"
+          style={{ fontSize: 'var(--title-size)', height: 48 }}
+          className="font-heading min-w-0 flex-1 rounded-xl border-2 border-transparent bg-transparent px-2 py-1 font-semibold outline-none transition hover:border-[color:var(--line)] focus:border-[color:var(--accent)] focus:bg-[color:var(--surface)]"
         />
+        <div
+          data-no-export
+          role="group"
+          aria-label="ธีม"
+          className="flex overflow-hidden border-2 border-[color:var(--line)] bg-[color:var(--surface)]"
+          style={{ borderRadius: 999 }}
+        >
+          {(['pastel', 'arcade', 'dark'] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setState((s) => ({ ...s, theme: t }))}
+              aria-pressed={state.theme === t}
+              title={t}
+              className="px-2.5 py-1 text-base transition"
+              style={state.theme === t ? { background: 'var(--accent)' } : undefined}
+            >
+              {t === 'pastel' ? '🌸' : t === 'arcade' ? '👾' : '🌙'}
+            </button>
+          ))}
+        </div>
         <button
           data-no-export
           onClick={() => void exportPng()}
@@ -367,6 +423,7 @@ export default function App() {
                 cardIds={tier.cardIds}
                 cards={state.cards}
                 fx={fx}
+                onOpen={openCard}
                 empty="ลากการ์ดมาวางตรงนี้ ✨"
                 className="min-h-[88px] flex-1"
               />
@@ -400,7 +457,7 @@ export default function App() {
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && addText()}
               placeholder="พิมพ์ชื่อการ์ดแล้วกด Enter…"
-              className="min-w-0 flex-1 rounded-full border-2 border-[color:var(--line)] bg-white px-4 py-2 outline-none transition focus:border-[color:var(--accent)]"
+              className="min-w-0 flex-1 rounded-full border-2 border-[color:var(--line)] bg-[color:var(--field-bg)] text-[color:var(--ink)] px-4 py-2 outline-none transition focus:border-[color:var(--accent)]"
             />
             <button
               onClick={() => fileRef.current?.click()}
@@ -426,6 +483,7 @@ export default function App() {
             cardIds={state.pool}
             cards={state.cards}
             fx={fx}
+            onOpen={openCard}
             empty="การ์ดหมดแล้ว! 🎉 พิมพ์ข้อความ วางรูป หรือลากไฟล์รูปมาใส่เพิ่มได้เลย"
             className="min-h-[88px] rounded-xl"
           />
@@ -440,10 +498,20 @@ export default function App() {
         </DragOverlay>
       </DndContext>
 
+      {editingId && state.cards[editingId] && (
+        <CardDialog
+          key={editingId}
+          card={state.cards[editingId]}
+          onSave={(patch) => saveCard(editingId, patch)}
+          onDelete={() => deleteCard(editingId)}
+          onClose={() => setEditingId(null)}
+        />
+      )}
+
       {toast && (
         <div
           role="status"
-          className="font-display fixed bottom-6 left-1/2 -translate-x-1/2 rounded-full bg-[color:var(--ink)] px-5 py-2.5 text-sm text-white shadow-lg"
+          className="font-display fixed bottom-6 left-1/2 -translate-x-1/2 rounded-full bg-[color:var(--ink)] px-5 py-2.5 text-sm text-[color:var(--bg)] shadow-lg"
         >
           {toast}
         </div>

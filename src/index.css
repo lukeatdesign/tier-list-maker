@@ -21,8 +21,66 @@
   --radius: 16px;
   --shadow: 0 4px 0 rgba(214, 170, 140, 0.25), 0 10px 24px rgba(214, 170, 140, 0.18);
   --shadow-card: 0 2px 0 rgba(214, 170, 140, 0.3), 0 4px 10px rgba(214, 170, 140, 0.15);
+  --field-bg: #ffffff;
+  --overlay-shadow: 0 12px 28px rgba(150, 100, 90, 0.3);
+  --title-size: 1.875rem;
+  --label-size: 1.875rem;
   --font-display: 'Fredoka', 'Noto Sans Thai', sans-serif;
+  --font-heading: 'Fredoka', 'Noto Sans Thai', sans-serif;
   --font-body: 'Noto Sans Thai', 'Fredoka', sans-serif;
+}
+
+/* arcade: dark navy, neon tiers, hard offset shadows, pixel font for headings only */
+[data-theme='arcade'] {
+  --bg: #0f1230;
+  --bg-dots: #181c4a;
+  --surface: #151946;
+  --ink: #e8ecff;
+  --ink-soft: #8f98d6;
+  --line: #3039a8;
+  --accent: #ff2e97;
+  --accent-ink: #ffffff;
+  --tier-1: #ff4d6d;
+  --tier-2: #ff9f1c;
+  --tier-3: #f9f871;
+  --tier-4: #3cff9e;
+  --tier-5: #3ac8ff;
+  --tier-ink: #0f1230;
+  --card-bg: #222866;
+  --card-border: #5a66f0;
+  --radius: 4px;
+  --shadow: 6px 6px 0 #05061a;
+  --shadow-card: 3px 3px 0 #05061a;
+  --field-bg: #0f1230;
+  --overlay-shadow: 6px 6px 0 #05061a;
+  --title-size: 1.25rem;
+  --label-size: 1rem;
+  --font-heading: 'Press Start 2P', 'Noto Sans Thai', monospace;
+}
+
+/* dark: neutral surface, muted tiers, minimal shadow */
+[data-theme='dark'] {
+  --bg: #16161c;
+  --bg-dots: #1c1c24;
+  --surface: #1e1e26;
+  --ink: #e6e6ee;
+  --ink-soft: #8b8b9c;
+  --line: #33333f;
+  --accent: #8b9cff;
+  --accent-ink: #14141a;
+  --tier-1: #b5575f;
+  --tier-2: #b98a52;
+  --tier-3: #a8a35a;
+  --tier-4: #5f9a6c;
+  --tier-5: #5a82b5;
+  --tier-ink: #14141a;
+  --card-bg: #2a2a35;
+  --card-border: #3a3a48;
+  --radius: 10px;
+  --shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+  --shadow-card: 0 1px 0 rgba(0, 0, 0, 0.5);
+  --field-bg: #16161c;
+  --overlay-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
 }
 
 html,
@@ -44,7 +102,13 @@ body {
   font-family: var(--font-display);
 }
 
+.font-heading {
+  font-family: var(--font-heading);
+}
+
 .card {
+  position: relative;
+  color: var(--ink);
   background: var(--card-bg);
   border: 2px solid var(--card-border);
   border-radius: calc(var(--radius) - 4px);
@@ -62,7 +126,18 @@ body {
 .card.dragging-overlay {
   cursor: grabbing;
   transform: rotate(4deg) scale(1.08);
-  box-shadow: 0 12px 28px rgba(150, 100, 90, 0.3);
+  box-shadow: var(--overlay-shadow);
+}
+.note-dot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--card-bg);
+  box-sizing: content-box;
 }
 
 .drop-over {

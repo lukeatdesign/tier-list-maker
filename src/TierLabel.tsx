@@ -27,8 +27,8 @@ export default function TierLabel({ label, onChange }: { label: string; onChange
           if (e.key === 'Enter' && !e.nativeEvent.isComposing) commit()
           if (e.key === 'Escape') setEditing(false)
         }}
-        className="font-display w-full bg-white/60 text-center text-2xl font-semibold outline-none ring-2 ring-[color:var(--accent)]"
-        style={{ borderRadius: 8, color: 'var(--tier-ink)' }}
+        className="font-heading w-full bg-white/60 text-center font-semibold outline-none ring-2 ring-[color:var(--accent)]"
+        style={{ borderRadius: 8, color: 'var(--tier-ink)', fontSize: 'var(--label-size)' }}
         aria-label="ชื่อ tier"
       />
     )
@@ -39,7 +39,8 @@ export default function TierLabel({ label, onChange }: { label: string; onChange
         setEditing(true)
       }}
       title="คลิกเพื่อแก้ชื่อ"
-      className="font-display h-full w-full break-words text-3xl font-semibold leading-tight hover:bg-white/30"
+      className="font-heading h-full w-full break-words font-semibold leading-tight hover:bg-white/30"
+      style={{ fontSize: 'var(--label-size)' }}
     >
       {label}
     </button>
