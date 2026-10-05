@@ -17,6 +17,7 @@ import type { Card, State } from './types'
 import { loadState, saveState, initialState, uid } from './store'
 import { fileToDataUrl } from './image'
 import confetti from 'canvas-confetti'
+import { toBlob, toPng } from 'html-to-image'
 import { sounds, unlockAudio } from './sound'
 import TierLabel from './TierLabel'
 
@@ -83,7 +84,7 @@ function Zone({
       >
         {cardIds.map((cid) => cards[cid] && <SortableCard key={cid} card={cards[cid]} fx={fx?.id === cid ? fx : null} />)}
         {cardIds.length === 0 && (
-          <span className="select-none text-sm text-[color:var(--ink-soft)] opacity-70">{empty}</span>
+          <span data-no-export className="select-none text-sm text-[color:var(--ink-soft)] opacity-70">{empty}</span>
         )}
       </div>
     </SortableContext>
@@ -99,6 +100,7 @@ export default function App() {
   const [text, setText] = useState('')
   const [fileOver, setFileOver] = useState(false)
   const [fx, setFx] = useState<DropFx | null>(null)
+  const exportRef = useRef<HTMLDivElement>(null)
   const stateRef = useRef(state)
   stateRef.current = state
   const fileRef = useRef<HTMLInputElement>(null)
@@ -243,6 +245,43 @@ export default function App() {
     playDropFx(aId)
   }
 
+  /* --- export --- */
+
+  const exportOptions = async () => {
+    await document.fonts.ready
+    return {
+      pixelRatio: 2,
+      backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--bg').trim(),
+      filter: (n: Node) => !(n instanceof HTMLElement && n.dataset.noExport !== undefined),
+    }
+  }
+
+  const exportPng = async () => {
+    if (!exportRef.current) return
+    try {
+      const url = await toPng(exportRef.current, await exportOptions())
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'tierlist.png'
+      a.click()
+      showToast('บันทึก tierlist.png แล้ว ✨')
+    } catch {
+      showToast('Export ไม่สำเร็จ ลองอีกครั้งนะ')
+    }
+  }
+
+  const copyPng = async () => {
+    if (!exportRef.current) return
+    try {
+      const blob = await toBlob(exportRef.current, await exportOptions())
+      if (!blob) throw new Error('no blob')
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+      showToast('คัดลอกรูปแล้ว วางในแชทได้เลย ✨')
+    } catch {
+      showToast('คัดลอกรูปไม่สำเร็จ ลองกด Export PNG แทนนะ')
+    }
+  }
+
   const reset = () => {
     if (window.confirm('เริ่มใหม่ทั้งหมดเลยนะ? การ์ดและอันดับที่จัดไว้จะหาย')) setState(initialState())
   }
@@ -252,7 +291,16 @@ export default function App() {
 
   return (
     <div className="mx-auto max-w-5xl px-5 pb-16 pt-6">
-      {/* top bar */}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={onDragStart}
+        onDragOver={onDragOver}
+        onDragEnd={onDragEnd}
+        onDragCancel={() => setActiveId(null)}
+      >
+      {/* export area = title + board; anything with data-no-export is skipped */}
+      <div ref={exportRef} className="p-4">
       <header className="mb-5 flex items-center gap-3">
         <span className="text-3xl" aria-hidden>
           🍡
@@ -264,6 +312,22 @@ export default function App() {
           className="font-display min-w-0 flex-1 rounded-xl border-2 border-transparent bg-transparent px-2 py-1 text-3xl font-semibold outline-none transition hover:border-[color:var(--line)] focus:border-[color:var(--accent)] focus:bg-[color:var(--surface)]"
         />
         <button
+          data-no-export
+          onClick={() => void exportPng()}
+          className="font-display rounded-full px-4 py-1.5 text-sm font-medium transition hover:brightness-105 active:translate-y-px"
+          style={{ background: 'var(--accent)', color: 'var(--accent-ink)', boxShadow: '0 3px 0 rgba(0,0,0,.12)' }}
+        >
+          Export PNG
+        </button>
+        <button
+          data-no-export
+          onClick={() => void copyPng()}
+          className="font-display rounded-full border-2 border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-1.5 text-sm font-medium transition hover:border-[color:var(--accent)]"
+        >
+          Copy image
+        </button>
+        <button
+          data-no-export
           onClick={() => setState((s) => ({ ...s, muted: !s.muted }))}
           aria-label={state.muted ? 'เปิดเสียง' : 'ปิดเสียง'}
           title={state.muted ? 'เปิดเสียง' : 'ปิดเสียง'}
@@ -272,6 +336,7 @@ export default function App() {
           {state.muted ? '🔇' : '🔊'}
         </button>
         <button
+          data-no-export
           onClick={reset}
           className="font-display rounded-full border-2 border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-1.5 text-sm font-medium text-[color:var(--ink-soft)] transition hover:border-[color:var(--accent)] hover:text-[color:var(--accent)]"
         >
@@ -279,14 +344,6 @@ export default function App() {
         </button>
       </header>
 
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragStart={onDragStart}
-        onDragOver={onDragOver}
-        onDragEnd={onDragEnd}
-        onDragCancel={() => setActiveId(null)}
-      >
         {/* board */}
         <section
           className="overflow-hidden border-2 border-[color:var(--line)] bg-[color:var(--surface)]"
@@ -316,6 +373,7 @@ export default function App() {
             </div>
           ))}
         </section>
+      </div>
 
         {/* pool */}
         <section
