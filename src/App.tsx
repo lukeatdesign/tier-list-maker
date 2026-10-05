@@ -21,6 +21,7 @@ import { toBlob, toPng } from 'html-to-image'
 import { sounds, unlockAudio } from './sound'
 import TierLabel from './TierLabel'
 import CardDialog from './CardDialog'
+import ConfirmDelete from './ConfirmDelete'
 
 const POOL = 'pool'
 
@@ -38,13 +39,13 @@ function CardFace({ card }: { card: Card }) {
 
 type DropFx = { id: string; kind: 'first' | 'last' | 'mid'; n: number }
 
-function SortableCard({ card, fx, onOpen }: { card: Card; fx: DropFx | null; onOpen: (id: string) => void }) {
+function SortableCard({ card, fx, onOpen, onAskDelete }: { card: Card; fx: DropFx | null; onOpen: (id: string) => void; onAskDelete: (id: string) => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: card.id })
   return (
     <div
       ref={setNodeRef}
       data-card-id={card.id}
-      className="touch-none"
+      className="group relative touch-none"
       onClick={() => onOpen(card.id)}
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.3 : 1 }}
       {...attributes}
@@ -57,6 +58,19 @@ function SortableCard({ card, fx, onOpen }: { card: Card; fx: DropFx | null; onO
         <CardFace card={card} />
         {card.note && <span className="note-dot" title="มีโน้ต" />}
       </div>
+      <button
+        data-no-export
+        aria-label="ลบการ์ด"
+        title="ลบการ์ด"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation()
+          onAskDelete(card.id)
+        }}
+        className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-[color:var(--ink)] text-[11px] leading-none text-[color:var(--bg)] opacity-0 transition hover:bg-red-500 hover:text-white focus:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+      >
+        ✕
+      </button>
     </div>
   )
 }
@@ -70,6 +84,7 @@ function Zone({
   empty,
   fx,
   onOpen,
+  onAskDelete,
   className = '',
 }: {
   id: string
@@ -77,6 +92,7 @@ function Zone({
   cards: Record<string, Card>
   fx: DropFx | null
   onOpen: (id: string) => void
+  onAskDelete: (id: string) => void
   empty: React.ReactNode
   className?: string
 }) {
@@ -87,7 +103,7 @@ function Zone({
         ref={setNodeRef}
         className={`flex flex-wrap content-start items-center gap-2.5 p-3 transition-colors ${isOver ? 'drop-over' : ''} ${className}`}
       >
-        {cardIds.map((cid) => cards[cid] && <SortableCard key={cid} card={cards[cid]} fx={fx?.id === cid ? fx : null} onOpen={onOpen} />)}
+        {cardIds.map((cid) => cards[cid] && <SortableCard key={cid} card={cards[cid]} fx={fx?.id === cid ? fx : null} onOpen={onOpen} onAskDelete={onAskDelete} />)}
         {cardIds.length === 0 && (
           <span data-no-export className="select-none text-sm text-[color:var(--ink-soft)] opacity-70">{empty}</span>
         )}
@@ -106,6 +122,7 @@ export default function App() {
   const [fileOver, setFileOver] = useState(false)
   const [fx, setFx] = useState<DropFx | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [confirmId, setConfirmId] = useState<string | null>(null)
   const exportRef = useRef<HTMLDivElement>(null)
   const stateRef = useRef(state)
   stateRef.current = state
@@ -231,6 +248,8 @@ export default function App() {
 
   const deleteCard = (id: string) => {
     setEditingId(null)
+    setConfirmId(null)
+    if (!stateRef.current.muted) sounds.boom()
     setState((s) => {
       const { [id]: _gone, ...cards } = s.cards
       return {
@@ -424,6 +443,7 @@ export default function App() {
                 cards={state.cards}
                 fx={fx}
                 onOpen={openCard}
+                onAskDelete={setConfirmId}
                 empty="ลากการ์ดมาวางตรงนี้ ✨"
                 className="min-h-[88px] flex-1"
               />
@@ -484,6 +504,7 @@ export default function App() {
             cards={state.cards}
             fx={fx}
             onOpen={openCard}
+            onAskDelete={setConfirmId}
             empty="การ์ดหมดแล้ว! 🎉 พิมพ์ข้อความ วางรูป หรือลากไฟล์รูปมาใส่เพิ่มได้เลย"
             className="min-h-[88px] rounded-xl"
           />
@@ -503,8 +524,16 @@ export default function App() {
           key={editingId}
           card={state.cards[editingId]}
           onSave={(patch) => saveCard(editingId, patch)}
-          onDelete={() => deleteCard(editingId)}
+          onDelete={() => setConfirmId(editingId)}
           onClose={() => setEditingId(null)}
+        />
+      )}
+
+      {confirmId && state.cards[confirmId] && (
+        <ConfirmDelete
+          label={state.cards[confirmId].kind === 'text' ? (state.cards[confirmId].text ?? '') : 'รูปนี้'}
+          onConfirm={() => deleteCard(confirmId)}
+          onCancel={() => setConfirmId(null)}
         />
       )}
 
