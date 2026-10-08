@@ -507,7 +507,7 @@ export default function App() {
   const tierVars = ['--tier-1', '--tier-2', '--tier-3', '--tier-4', '--tier-5']
 
   return (
-    <div className="mx-auto max-w-5xl px-5 pb-16 pt-6">
+    <div className="mx-auto w-full max-w-[2400px] px-2 pb-12 pt-3">
       <DndContext
         sensors={sensors}
         collisionDetection={collision}
@@ -517,7 +517,7 @@ export default function App() {
         onDragCancel={endDrag}
       >
       {/* menu bar: lives outside the export area */}
-      <div className="flex flex-wrap items-center justify-end gap-2 px-4 pt-1">
+      <div className="flex flex-wrap items-center justify-end gap-2 px-3 pt-1">
         <div
           data-no-export
           role="group"
@@ -588,7 +588,7 @@ export default function App() {
       </div>
 
       {/* export area = title + board */}
-      <div ref={exportRef} className="p-4">
+      <div ref={exportRef} className="p-3">
         <header className="mb-5 flex items-center gap-3">
           <span className="text-3xl" aria-hidden>
             🍡
