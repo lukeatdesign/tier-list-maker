@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -52,10 +52,14 @@ function CardFace({ card }: { card: Card }) {
   )
 }
 
+/** id of the card currently doing the easter-egg dance (5 quick clicks), if any */
+const DanceContext = createContext<string | null>(null)
+
 type DropFx = { id: string; kind: 'first' | 'last' | 'mid'; n: number }
 
 function SortableCard({ card, fx, onOpen, onAskDelete }: { card: Card; fx: DropFx | null; onOpen: (id: string) => void; onAskDelete: (id: string) => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: card.id })
+  const dancing = useContext(DanceContext) === card.id
   return (
     <div
       ref={setNodeRef}
@@ -68,7 +72,7 @@ function SortableCard({ card, fx, onOpen, onAskDelete }: { card: Card; fx: DropF
     >
       <div
         key={fx ? fx.n : 0}
-        className={`card flex items-center justify-center overflow-hidden ${fx ? (fx.kind === 'last' ? 'fx-sad' : 'fx-bounce') : ''}`}
+        className={`card flex items-center justify-center overflow-hidden ${dancing ? 'fx-dance' : fx ? (fx.kind === 'last' ? 'fx-sad' : 'fx-bounce') : ''}`}
       >
         <CardFace card={card} />
         {card.note && <span className="note-dot" title="มีโน้ต" />}
@@ -227,6 +231,7 @@ export default function App() {
       /* ignore */
     }
   }, [width])
+  const [danceId, setDanceId] = useState<string | null>(null)
   const [confirmId, setConfirmId] = useState<string | null>(null)
   const [tierEditId, setTierEditId] = useState<string | null>(null)
   const [confirmTierId, setConfirmTierId] = useState<string | null>(null)
@@ -347,8 +352,50 @@ export default function App() {
 
   // a click opens the card dialog; the click that ends a drag must not
   const justDragged = useRef(false)
+  /* easter egg: click the same card 5 times quickly and it dances with confetti for 6 s, then goes back to normal.
+     A single click still opens the dialog, just ~0.28 s later so a second click can cancel it. */
+  const clicks = useRef({ id: '', n: 0, t: 0 })
+  const pendingOpen = useRef(0)
+  const danceTimer = useRef(0)
+  const danceRef = useRef<string | null>(null)
+
+  const startDance = (id: string) => {
+    danceRef.current = id
+    setDanceId(id)
+    if (!stateRef.current.muted) sounds.win()
+    const end = performance.now() + 6000
+    const frame = () => {
+      const r = document.querySelector(`[data-card-id="${id}"]`)?.getBoundingClientRect()
+      if (r) {
+        const y = (r.top + r.height / 2) / innerHeight
+        const x = (r.left + r.width / 2) / innerWidth
+        confetti({ particleCount: 3, angle: 60, spread: 55, startVelocity: 38, ticks: 90, origin: { x: x - 0.02, y }, disableForReducedMotion: true })
+        confetti({ particleCount: 3, angle: 120, spread: 55, startVelocity: 38, ticks: 90, origin: { x: x + 0.02, y }, disableForReducedMotion: true })
+      }
+      if (performance.now() < end && danceRef.current === id) requestAnimationFrame(frame)
+    }
+    frame()
+    window.clearTimeout(danceTimer.current)
+    danceTimer.current = window.setTimeout(() => {
+      danceRef.current = null
+      setDanceId(null)
+    }, 6000)
+  }
+
   const openCard = (id: string) => {
-    if (!justDragged.current) setEditingId(id)
+    if (justDragged.current || danceRef.current === id) return
+    const c = clicks.current
+    const now = performance.now()
+    c.n = c.id === id && now - c.t < 450 ? c.n + 1 : 1
+    c.id = id
+    c.t = now
+    window.clearTimeout(pendingOpen.current)
+    if (c.n >= 5) {
+      c.n = 0
+      startDance(id)
+      return
+    }
+    pendingOpen.current = window.setTimeout(() => setEditingId(id), 280)
   }
   const endDrag = () => {
     setActiveId(null)
@@ -524,6 +571,7 @@ export default function App() {
 
   return (
     <div className="mx-auto w-full px-2 pb-12 pt-3" style={{ maxWidth: width }}>
+      <DanceContext.Provider value={danceId}>
       <DndContext
         sensors={sensors}
         collisionDetection={collision}
@@ -733,6 +781,7 @@ export default function App() {
           )}
         </DragOverlay>
       </DndContext>
+      </DanceContext.Provider>
 
       {editingId && state.cards[editingId] && (
         <CardDialog
