@@ -576,7 +576,7 @@ export default function App() {
   const tierVars = ['--tier-1', '--tier-2', '--tier-3', '--tier-4', '--tier-5']
 
   return (
-    <div className="mx-auto w-full px-2 pb-12 pt-3" style={{ maxWidth: width }}>
+    <div className="w-full px-2 pb-12 pt-3">
       <DndContext
         sensors={sensors}
         collisionDetection={collision}
@@ -587,7 +587,7 @@ export default function App() {
       >
       {/* menu bar: lives outside the export area; stays pinned to the top while scrolling */}
       <div
-        className="sticky top-0 z-40 flex flex-wrap items-center justify-end gap-2 rounded-b-2xl px-3 py-2 backdrop-blur-md"
+        className="sticky top-0 z-40 -mx-2 flex flex-wrap items-center justify-end gap-2 px-5 py-2 backdrop-blur-md"
         style={{ background: "color-mix(in srgb, var(--bg) 88%, transparent)", boxShadow: "0 1px 0 var(--line)" }}
       >
         <div
@@ -678,6 +678,9 @@ export default function App() {
           Reset
         </button>
       </div>
+
+      {/* everything below the bar follows the chosen width; the bar itself stays full-width so its buttons never move */}
+      <div className="mx-auto w-full" style={{ maxWidth: width }}>
 
       {/* export area = title + board */}
       <div ref={exportRef} className="p-3">
@@ -791,6 +794,7 @@ export default function App() {
             </div>
           )}
         </DragOverlay>
+      </div>
       </DndContext>
 
       {editingId && state.cards[editingId] && (
