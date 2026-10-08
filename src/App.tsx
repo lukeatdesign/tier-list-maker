@@ -13,7 +13,7 @@ import {
   type DragOverEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
-import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from '@dnd-kit/sortable'
+import { SortableContext, arrayMove, rectSortingStrategy, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import type { Card, State, Tier } from './types'
 import { loadState, saveState, initialState, uid } from './store'
@@ -30,9 +30,13 @@ import { SWATCHES, inkFor } from './tierColor'
 const POOL = 'pool'
 
 // the row under the pointer wins, so a small nudge into a neighbouring tier is enough; fall back to nearest centre
+// tier rows (ids "row:…") only collide with other rows; cards only with cards and drop zones
+const isRowId = (id: unknown) => String(id).startsWith('row:')
 const collision: CollisionDetection = (args) => {
-  const hits = pointerWithin(args)
-  return hits.length ? hits : closestCenter(args)
+  const dragRow = isRowId(args.active.id)
+  const scoped = { ...args, droppableContainers: args.droppableContainers.filter((c) => isRowId(c.id) === dragRow) }
+  const hits = pointerWithin(scoped)
+  return hits.length ? hits : closestCenter(scoped)
 }
 
 /* ---------- card ---------- */
@@ -81,6 +85,80 @@ function SortableCard({ card, fx, onOpen, onAskDelete }: { card: Card; fx: DropF
       >
         ✕
       </button>
+    </div>
+  )
+}
+
+/* ---------- tier row (drag the ⠿ handle to reorder) ---------- */
+
+type TierRowProps = {
+  tier: Tier
+  fallbackColor: string
+  cards: Record<string, Card>
+  fx: DropFx | null
+  onOpen: (id: string) => void
+  onAskDelete: (id: string) => void
+  onRename: (label: string) => void
+  onSettings: () => void
+}
+
+function TierRow({ tier, fallbackColor, cards, fx, onOpen, onAskDelete, onRename, onSettings }: TierRowProps) {
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
+    id: `row:${tier.id}`,
+  })
+  const hoverBtn =
+    'absolute top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/25 text-[12px] leading-none text-white opacity-0 transition hover:bg-black/50 focus:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100'
+  return (
+    <div
+      ref={setNodeRef}
+      className="relative flex border-b-2 border-[color:var(--line)] bg-[color:var(--surface)] last:border-b-0"
+      style={{
+        transform: CSS.Translate.toString(transform),
+        transition,
+        zIndex: isDragging ? 10 : undefined,
+        boxShadow: isDragging ? 'var(--shadow)' : undefined,
+      }}
+    >
+      <div
+        className="font-display group relative flex w-28 shrink-0 select-none items-center justify-center p-2 text-center"
+        style={{
+          background: tier.color ?? fallbackColor,
+          color: tier.color ? inkFor(tier.color) : 'var(--tier-ink)',
+        }}
+      >
+        <TierLabel label={tier.label} onChange={onRename} />
+        <button
+          ref={setActivatorNodeRef}
+          data-no-export
+          {...attributes}
+          {...listeners}
+          aria-label="ลากเพื่อเรียง tier"
+          title="ลากขึ้นลงเพื่อเรียง tier"
+          className={`${hoverBtn} left-1 cursor-grab touch-none`}
+          style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
+        >
+          ⠿
+        </button>
+        <button
+          data-no-export
+          onClick={onSettings}
+          aria-label="ตั้งค่า tier"
+          title="ชื่อ / สี / ลบ tier"
+          className={`${hoverBtn} right-1`}
+        >
+          ⚙
+        </button>
+      </div>
+      <Zone
+        id={tier.id}
+        cardIds={tier.cardIds}
+        cards={cards}
+        fx={fx}
+        onOpen={onOpen}
+        onAskDelete={onAskDelete}
+        empty="ลากการ์ดมาวางตรงนี้ ✨"
+        className="min-h-[88px] flex-1"
+      />
     </div>
   )
 }
@@ -310,11 +388,11 @@ export default function App() {
 
   const onDragStart = (e: DragStartEvent) => {
     justDragged.current = true
-    setActiveId(String(e.active.id))
+    if (!isRowId(e.active.id)) setActiveId(String(e.active.id))
   }
 
   const onDragOver = ({ active, over }: DragOverEvent) => {
-    if (!over) return
+    if (!over || isRowId(active.id)) return
     const aId = String(active.id)
     const oId = String(over.id)
     setState((s) => {
@@ -334,6 +412,16 @@ export default function App() {
     if (!over) return
     const aId = String(active.id)
     const oId = String(over.id)
+    if (isRowId(aId)) {
+      // reordering tiers: no drop effects, cards ride along inside their row
+      if (!isRowId(oId)) return
+      setState((s) => {
+        const from = s.tiers.findIndex((t) => `row:${t.id}` === aId)
+        const to = s.tiers.findIndex((t) => `row:${t.id}` === oId)
+        return from < 0 || to < 0 || from === to ? s : { ...s, tiers: arrayMove(s.tiers, from, to) }
+      })
+      return
+    }
     setState((s) => {
       const c = containerOf(s, aId)
       if (!c || c !== containerOf(s, oId)) return s
@@ -471,38 +559,21 @@ export default function App() {
           className="overflow-hidden border-2 border-[color:var(--line)] bg-[color:var(--surface)]"
           style={{ borderRadius: 'var(--radius)', boxShadow: 'var(--shadow)' }}
         >
-          {state.tiers.map((tier, i) => (
-            <div key={tier.id} className="flex border-b-2 border-[color:var(--line)] last:border-b-0">
-              <div
-                className="font-display group relative flex w-28 shrink-0 select-none items-center justify-center p-2 text-center"
-                style={{
-                  background: tier.color ?? `var(${tierVars[i % 5]})`,
-                  color: tier.color ? inkFor(tier.color) : 'var(--tier-ink)',
-                }}
-              >
-                <TierLabel label={tier.label} onChange={(label) => saveTier(tier.id, { label })} />
-                <button
-                  data-no-export
-                  onClick={() => setTierEditId(tier.id)}
-                  aria-label="ตั้งค่า tier"
-                  title="ชื่อ / สี / ลบ tier"
-                  className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/25 text-[12px] leading-none text-white opacity-0 transition hover:bg-black/50 focus:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
-                >
-                  ⚙
-                </button>
-              </div>
-              <Zone
-                id={tier.id}
-                cardIds={tier.cardIds}
+          <SortableContext items={state.tiers.map((t) => `row:${t.id}`)} strategy={verticalListSortingStrategy}>
+            {state.tiers.map((tier, i) => (
+              <TierRow
+                key={tier.id}
+                tier={tier}
+                fallbackColor={`var(${tierVars[i % 5]})`}
                 cards={state.cards}
                 fx={fx}
                 onOpen={openCard}
                 onAskDelete={setConfirmId}
-                empty="ลากการ์ดมาวางตรงนี้ ✨"
-                className="min-h-[88px] flex-1"
+                onRename={(label) => saveTier(tier.id, { label })}
+                onSettings={() => setTierEditId(tier.id)}
               />
-            </div>
-          ))}
+            ))}
+          </SortableContext>
         </section>
       </div>
 
