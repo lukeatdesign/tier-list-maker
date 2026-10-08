@@ -26,6 +26,7 @@ import CardDialog from './CardDialog'
 import ConfirmDelete from './ConfirmDelete'
 import TierDialog from './TierDialog'
 import { SWATCHES, inkFor } from './tierColor'
+import { boardFileName, parseBoard, serializeBoard } from './serialize'
 
 const POOL = 'pool'
 
@@ -471,6 +472,33 @@ export default function App() {
     }
   }
 
+  /* --- save / load board as a .tierlist.json file --- */
+
+  const importRef = useRef<HTMLInputElement>(null)
+
+  const saveJson = () => {
+    const url = URL.createObjectURL(new Blob([serializeBoard(stateRef.current)], { type: 'application/json' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = boardFileName(stateRef.current.title)
+    a.click()
+    window.setTimeout(() => URL.revokeObjectURL(url), 10_000)
+    showToast('บันทึกไฟล์ .tierlist.json แล้ว ✨')
+  }
+
+  const loadJson = async (file: File | undefined) => {
+    if (!file) return
+    try {
+      const board = parseBoard(JSON.parse(await file.text()))
+      if (!board) throw new Error('not a board')
+      if (!window.confirm(`โหลด “${board.title}” (${Object.keys(board.cards).length} การ์ด)? บอร์ดปัจจุบันจะถูกแทนที่`)) return
+      setState(board)
+      showToast('โหลดบอร์ดแล้ว ✨')
+    } catch {
+      showToast('ไฟล์นี้ไม่ใช่บอร์ด tier list ที่อ่านได้')
+    }
+  }
+
   const reset = () => {
     if (window.confirm('เริ่มใหม่ทั้งหมดเลยนะ? การ์ดและอันดับที่จัดไว้จะหาย')) setState(initialState())
   }
@@ -488,19 +516,8 @@ export default function App() {
         onDragEnd={onDragEnd}
         onDragCancel={endDrag}
       >
-      {/* export area = title + board; anything with data-no-export is skipped */}
-      <div ref={exportRef} className="p-4">
-      <header className="mb-5 flex items-center gap-3">
-        <span className="text-3xl" aria-hidden>
-          🍡
-        </span>
-        <input
-          value={state.title}
-          onChange={(e) => setState((s) => ({ ...s, title: e.target.value }))}
-          aria-label="ชื่อ Tier List"
-          style={{ fontSize: 'var(--title-size)', height: 48 }}
-          className="font-heading min-w-0 flex-1 rounded-xl border-2 border-transparent bg-transparent px-2 py-1 font-semibold outline-none transition hover:border-[color:var(--line)] focus:border-[color:var(--accent)] focus:bg-[color:var(--surface)]"
-        />
+      {/* menu bar: lives outside the export area */}
+      <div className="flex flex-wrap items-center justify-end gap-2 px-4 pt-1">
         <div
           data-no-export
           role="group"
@@ -536,6 +553,22 @@ export default function App() {
         >
           Copy image
         </button>
+        <button onClick={saveJson} title="บันทึกบอร์ดเป็นไฟล์ .tierlist.json" className="font-display rounded-full border-2 border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-1.5 text-sm font-medium transition hover:border-[color:var(--accent)]">
+          Save JSON
+        </button>
+        <button onClick={() => importRef.current?.click()} title="โหลดบอร์ดจากไฟล์ .tierlist.json" className="font-display rounded-full border-2 border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-1.5 text-sm font-medium transition hover:border-[color:var(--accent)]">
+          Load JSON
+        </button>
+        <input
+          ref={importRef}
+          type="file"
+          accept=".json,application/json"
+          hidden
+          onChange={(e) => {
+            void loadJson(e.target.files?.[0])
+            e.target.value = ''
+          }}
+        />
         <button
           data-no-export
           onClick={() => setState((s) => ({ ...s, muted: !s.muted }))}
@@ -552,7 +585,22 @@ export default function App() {
         >
           Reset
         </button>
-      </header>
+      </div>
+
+      {/* export area = title + board */}
+      <div ref={exportRef} className="p-4">
+        <header className="mb-5 flex items-center gap-3">
+          <span className="text-3xl" aria-hidden>
+            🍡
+          </span>
+          <input
+            value={state.title}
+            onChange={(e) => setState((s) => ({ ...s, title: e.target.value }))}
+            aria-label="ชื่อ Tier List"
+            style={{ fontSize: 'var(--title-size)', height: 48 }}
+            className="font-heading min-w-0 flex-1 rounded-xl border-2 border-transparent bg-transparent px-2 py-1 font-semibold outline-none transition hover:border-[color:var(--line)] focus:border-[color:var(--accent)] focus:bg-[color:var(--surface)]"
+          />
+        </header>
 
         {/* board */}
         <section

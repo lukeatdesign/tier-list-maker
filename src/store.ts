@@ -1,4 +1,5 @@
 import type { Card, State } from './types'
+import { parseBoard } from './serialize'
 
 const KEY = 'tierlist.v1'
 export const uid = () => Math.random().toString(36).slice(2, 10)
@@ -28,8 +29,8 @@ export function loadState(): State {
   try {
     const raw = localStorage.getItem(KEY)
     if (raw) {
-      const s = JSON.parse(raw) as State
-      if (s && Array.isArray(s.tiers) && Array.isArray(s.pool) && s.cards) return s
+      const s = parseBoard(JSON.parse(raw))
+      if (s) return s
     }
   } catch {
     /* fall through */
@@ -53,8 +54,7 @@ function stateFromHash(): State | null {
   if (!m) return null
   try {
     const bin = atob(m[1].replace(/-/g, '+').replace(/_/g, '/'))
-    const s = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)))) as State
-    return Array.isArray(s.tiers) && Array.isArray(s.pool) && s.cards ? s : null
+    return parseBoard(JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)))))
   } catch {
     return null
   }
