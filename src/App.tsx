@@ -585,8 +585,11 @@ export default function App() {
         onDragEnd={onDragEnd}
         onDragCancel={endDrag}
       >
-      {/* menu bar: lives outside the export area */}
-      <div className="flex flex-wrap items-center justify-end gap-2 px-3 pt-1">
+      {/* menu bar: lives outside the export area; stays pinned to the top while scrolling */}
+      <div
+        className="sticky top-0 z-40 flex flex-wrap items-center justify-end gap-2 rounded-b-2xl px-3 py-2 backdrop-blur-md"
+        style={{ background: "color-mix(in srgb, var(--bg) 88%, transparent)", boxShadow: "0 1px 0 var(--line)" }}
+      >
         <div
           role="group"
           aria-label="ความกว้างบอร์ด"
