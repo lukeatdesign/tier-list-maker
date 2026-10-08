@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -30,6 +30,15 @@ import { boardFileName, parseBoard, serializeBoard } from './serialize'
 
 const POOL = 'pool'
 
+/** five fixed board widths instead of a free slider */
+const WIDTHS = [
+  { label: 'S', px: 800 },
+  { label: 'M', px: 1100 },
+  { label: 'L', px: 1440 },
+  { label: 'XL', px: 1920 },
+  { label: 'เต็ม', px: 2400 },
+] as const
+
 // the row under the pointer wins, so a small nudge into a neighbouring tier is enough; fall back to nearest centre
 // tier rows (ids "row:…") only collide with other rows; cards only with cards and drop zones
 const isRowId = (id: unknown) => String(id).startsWith('row:')
@@ -52,14 +61,10 @@ function CardFace({ card }: { card: Card }) {
   )
 }
 
-/** id of the card currently doing the easter-egg dance (5 quick clicks), if any */
-const DanceContext = createContext<string | null>(null)
-
 type DropFx = { id: string; kind: 'first' | 'last' | 'mid'; n: number }
 
 function SortableCard({ card, fx, onOpen, onAskDelete }: { card: Card; fx: DropFx | null; onOpen: (id: string) => void; onAskDelete: (id: string) => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: card.id })
-  const dancing = useContext(DanceContext) === card.id
   return (
     <div
       ref={setNodeRef}
@@ -72,7 +77,7 @@ function SortableCard({ card, fx, onOpen, onAskDelete }: { card: Card; fx: DropF
     >
       <div
         key={fx ? fx.n : 0}
-        className={`card flex items-center justify-center overflow-hidden ${dancing ? 'fx-dance' : fx ? (fx.kind === 'last' ? 'fx-sad' : 'fx-bounce') : ''}`}
+        className={`card flex items-center justify-center overflow-hidden ${fx ? (fx.kind === 'last' ? 'fx-sad' : 'fx-bounce') : ''}`}
       >
         <CardFace card={card} />
         {card.note && <span className="note-dot" title="มีโน้ต" />}
@@ -219,7 +224,9 @@ export default function App() {
   const [width, setWidth] = useState(() => {
     try {
       const n = Number(localStorage.getItem('tierlist.width'))
-      return n >= 640 && n <= 2400 ? n : 2400
+      if (!n) return 2400
+      // older versions stored a free pixel value: snap it to the nearest preset
+      return WIDTHS.reduce((best, w) => (Math.abs(w.px - n) < Math.abs(best.px - n) ? w : best)).px
     } catch {
       return 2400
     }
@@ -231,7 +238,7 @@ export default function App() {
       /* ignore */
     }
   }, [width])
-  const [danceId, setDanceId] = useState<string | null>(null)
+  const [stage, setStage] = useState<{ id: string; scale: number } | null>(null)
   const [confirmId, setConfirmId] = useState<string | null>(null)
   const [tierEditId, setTierEditId] = useState<string | null>(null)
   const [confirmTierId, setConfirmTierId] = useState<string | null>(null)
@@ -361,25 +368,24 @@ export default function App() {
 
   const startDance = (id: string) => {
     danceRef.current = id
-    setDanceId(id)
+    // a big copy of the card pops up in the middle of the screen and dances for 2 s; the real card never changes
+    const w = document.querySelector(`[data-card-id="${id}"] .card`)?.getBoundingClientRect().width ?? 120
+    setStage({ id, scale: Math.min(3.4, (innerWidth * 0.7) / w, (innerHeight * 0.5) / 64) })
     if (!stateRef.current.muted) sounds.win()
-    const end = performance.now() + 6000
+    const end = performance.now() + 2000
+    const burst = (angle: number, x: number) =>
+      confetti({ particleCount: 4, angle, spread: 60, startVelocity: 45, ticks: 90, origin: { x, y: 0.55 }, disableForReducedMotion: true })
     const frame = () => {
-      const r = document.querySelector(`[data-card-id="${id}"]`)?.getBoundingClientRect()
-      if (r) {
-        const y = (r.top + r.height / 2) / innerHeight
-        const x = (r.left + r.width / 2) / innerWidth
-        confetti({ particleCount: 3, angle: 60, spread: 55, startVelocity: 38, ticks: 90, origin: { x: x - 0.02, y }, disableForReducedMotion: true })
-        confetti({ particleCount: 3, angle: 120, spread: 55, startVelocity: 38, ticks: 90, origin: { x: x + 0.02, y }, disableForReducedMotion: true })
-      }
-      if (performance.now() < end && danceRef.current === id) requestAnimationFrame(frame)
+      burst(60, 0.38)
+      burst(120, 0.62)
+      if (performance.now() < end) requestAnimationFrame(frame)
     }
     frame()
     window.clearTimeout(danceTimer.current)
     danceTimer.current = window.setTimeout(() => {
       danceRef.current = null
-      setDanceId(null)
-    }, 6000)
+      setStage(null)
+    }, 2000)
   }
 
   const openCard = (id: string) => {
@@ -571,7 +577,6 @@ export default function App() {
 
   return (
     <div className="mx-auto w-full px-2 pb-12 pt-3" style={{ maxWidth: width }}>
-      <DanceContext.Provider value={danceId}>
       <DndContext
         sensors={sensors}
         collisionDetection={collision}
@@ -582,23 +587,26 @@ export default function App() {
       >
       {/* menu bar: lives outside the export area */}
       <div className="flex flex-wrap items-center justify-end gap-2 px-3 pt-1">
-        <label
-          className="font-display flex items-center gap-2 rounded-full border-2 border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-1 text-xs text-[color:var(--ink-soft)]"
-          title="ปรับความกว้างของบอร์ด (มีผลกับขนาดรูปที่ export ด้วย)"
+        <div
+          role="group"
+          aria-label="ความกว้างบอร์ด"
+          title="ความกว้างบอร์ด (มีผลกับขนาดรูปที่ export ด้วย)"
+          className="flex items-center overflow-hidden border-2 border-[color:var(--line)] bg-[color:var(--surface)]"
+          style={{ borderRadius: 999 }}
         >
-          ↔
-          <input
-            type="range"
-            min={640}
-            max={2400}
-            step={20}
-            value={width}
-            onChange={(e) => setWidth(Number(e.target.value))}
-            aria-label="ความกว้างบอร์ด"
-            className="w-28 accent-[color:var(--accent)]"
-          />
-          <span className="w-12 text-right tabular-nums">{width >= 2400 ? 'เต็ม' : width}</span>
-        </label>
+          <span className="px-2.5 text-sm text-[color:var(--ink-soft)]">↔</span>
+          {WIDTHS.map((w) => (
+            <button
+              key={w.px}
+              onClick={() => setWidth(w.px)}
+              aria-pressed={width === w.px}
+              className="font-display px-2.5 py-1 text-xs font-medium transition"
+              style={width === w.px ? { background: 'var(--accent)', color: 'var(--accent-ink)' } : undefined}
+            >
+              {w.label}
+            </button>
+          ))}
+        </div>
         <div
           data-no-export
           role="group"
@@ -781,7 +789,6 @@ export default function App() {
           )}
         </DragOverlay>
       </DndContext>
-      </DanceContext.Provider>
 
       {editingId && state.cards[editingId] && (
         <CardDialog
@@ -812,6 +819,16 @@ export default function App() {
           onConfirm={() => deleteTier(confirmTierId)}
           onCancel={() => setConfirmTierId(null)}
         />
+      )}
+
+      {stage && state.cards[stage.id] && (
+        <div className="pointer-events-none fixed inset-0 z-[70] flex items-center justify-center" aria-hidden>
+          <div style={{ transform: `scale(${stage.scale})` }}>
+            <div className="card dance-stage flex items-center justify-center overflow-hidden">
+              <CardFace card={state.cards[stage.id]} />
+            </div>
+          </div>
+        </div>
       )}
 
       {confirmId && state.cards[confirmId] && (
