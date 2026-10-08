@@ -15,7 +15,7 @@ import {
 } from '@dnd-kit/core'
 import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import type { Card, State } from './types'
+import type { Card, State, Tier } from './types'
 import { loadState, saveState, initialState, uid } from './store'
 import { fileToDataUrl } from './image'
 import confetti from 'canvas-confetti'
@@ -24,6 +24,8 @@ import { sounds, unlockAudio } from './sound'
 import TierLabel from './TierLabel'
 import CardDialog from './CardDialog'
 import ConfirmDelete from './ConfirmDelete'
+import TierDialog from './TierDialog'
+import { SWATCHES, inkFor } from './tierColor'
 
 const POOL = 'pool'
 
@@ -131,6 +133,8 @@ export default function App() {
   const [fx, setFx] = useState<DropFx | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [confirmId, setConfirmId] = useState<string | null>(null)
+  const [tierEditId, setTierEditId] = useState<string | null>(null)
+  const [confirmTierId, setConfirmTierId] = useState<string | null>(null)
   const exportRef = useRef<HTMLDivElement>(null)
   const stateRef = useRef(state)
   stateRef.current = state
@@ -258,6 +262,36 @@ export default function App() {
 
   const saveCard = (id: string, patch: Partial<Card>) =>
     setState((s) => (s.cards[id] ? { ...s, cards: { ...s.cards, [id]: { ...s.cards[id], ...patch } } } : s))
+
+  /* --- tiers: create / update / delete --- */
+
+  const saveTier = (id: string, patch: Partial<Tier>) =>
+    setState((s) => ({ ...s, tiers: s.tiers.map((t) => (t.id === id ? { ...t, ...patch } : t)) }))
+
+  const addTier = () =>
+    setState((s) => ({
+      ...s,
+      tiers: [...s.tiers, { id: uid(), label: 'tier ใหม่', cardIds: [], color: SWATCHES[s.tiers.length % SWATCHES.length] }],
+    }))
+
+  /** cards inside the deleted tier go back to the pool */
+  const deleteTier = (id: string) => {
+    setTierEditId(null)
+    setConfirmTierId(null)
+    setState((s) => {
+      const t = s.tiers.find((x) => x.id === id)
+      if (!t || s.tiers.length <= 1) return s
+      return { ...s, tiers: s.tiers.filter((x) => x.id !== id), pool: [...s.pool, ...t.cardIds] }
+    })
+  }
+
+  const askDeleteTier = (id: string) => {
+    const t = state.tiers.find((x) => x.id === id)
+    if (t && t.cardIds.length > 0) {
+      setTierEditId(null)
+      setConfirmTierId(id)
+    } else deleteTier(id)
+  }
 
   const deleteCard = (id: string) => {
     setEditingId(null)
@@ -440,15 +474,22 @@ export default function App() {
           {state.tiers.map((tier, i) => (
             <div key={tier.id} className="flex border-b-2 border-[color:var(--line)] last:border-b-0">
               <div
-                className="font-display flex w-24 shrink-0 select-none items-center justify-center p-2 text-center text-3xl font-semibold"
-                style={{ background: `var(${tierVars[i % 5]})`, color: 'var(--tier-ink)' }}
+                className="font-display group relative flex w-28 shrink-0 select-none items-center justify-center p-2 text-center"
+                style={{
+                  background: tier.color ?? `var(${tierVars[i % 5]})`,
+                  color: tier.color ? inkFor(tier.color) : 'var(--tier-ink)',
+                }}
               >
-                <TierLabel
-                  label={tier.label}
-                  onChange={(label) =>
-                    setState((s) => ({ ...s, tiers: s.tiers.map((t) => (t.id === tier.id ? { ...t, label } : t)) }))
-                  }
-                />
+                <TierLabel label={tier.label} onChange={(label) => saveTier(tier.id, { label })} />
+                <button
+                  data-no-export
+                  onClick={() => setTierEditId(tier.id)}
+                  aria-label="ตั้งค่า tier"
+                  title="ชื่อ / สี / ลบ tier"
+                  className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/25 text-[12px] leading-none text-white opacity-0 transition hover:bg-black/50 focus:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+                >
+                  ⚙
+                </button>
               </div>
               <Zone
                 id={tier.id}
@@ -464,6 +505,15 @@ export default function App() {
           ))}
         </section>
       </div>
+
+        <div className="mt-1 flex justify-center">
+          <button
+            onClick={addTier}
+            className="font-display rounded-full border-2 border-dashed border-[color:var(--line)] px-4 py-1.5 text-sm text-[color:var(--ink-soft)] transition hover:border-[color:var(--accent)] hover:text-[color:var(--accent)]"
+          >
+            + เพิ่ม tier
+          </button>
+        </div>
 
         {/* pool */}
         <section
@@ -542,9 +592,30 @@ export default function App() {
         />
       )}
 
+      {tierEditId && state.tiers.some((t) => t.id === tierEditId) && (
+        <TierDialog
+          key={tierEditId}
+          tier={state.tiers.find((t) => t.id === tierEditId)!}
+          themeColor={`var(${tierVars[state.tiers.findIndex((t) => t.id === tierEditId) % 5]})`}
+          canDelete={state.tiers.length > 1}
+          onSave={(patch) => saveTier(tierEditId, patch)}
+          onDelete={() => askDeleteTier(tierEditId)}
+          onClose={() => setTierEditId(null)}
+        />
+      )}
+
+      {confirmTierId && state.tiers.some((t) => t.id === confirmTierId) && (
+        <ConfirmDelete
+          title={`ลบ tier “${state.tiers.find((t) => t.id === confirmTierId)!.label}”?`}
+          message="การ์ดข้างในจะกลับไปอยู่ใน pool นะ"
+          onConfirm={() => deleteTier(confirmTierId)}
+          onCancel={() => setConfirmTierId(null)}
+        />
+      )}
+
       {confirmId && state.cards[confirmId] && (
         <ConfirmDelete
-          label={state.cards[confirmId].kind === 'text' ? (state.cards[confirmId].text ?? '') : 'รูปนี้'}
+          title={`ลบการ์ด “${state.cards[confirmId].kind === 'text' ? (state.cards[confirmId].text ?? '') : 'รูปนี้'}” จริงดิ?`}
           onConfirm={() => deleteCard(confirmId)}
           onCancel={() => setConfirmId(null)}
         />

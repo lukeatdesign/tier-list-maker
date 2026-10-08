@@ -1,6 +1,8 @@
 import { useEffect } from 'react'
 
-export default function ConfirmDelete({ label, onConfirm, onCancel }: { label: string; onConfirm: () => void; onCancel: () => void }) {
+type Props = { title: string; message?: string; onConfirm: () => void; onCancel: () => void }
+
+export default function ConfirmDelete({ title, message = 'ลบแล้ว หายไปเลยนะมึง', onConfirm, onCancel }: Props) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onCancel()
     window.addEventListener('keydown', onKey)
@@ -19,8 +21,8 @@ export default function ConfirmDelete({ label, onConfirm, onCancel }: { label: s
         style={{ borderRadius: 'var(--radius)', boxShadow: 'var(--shadow)' }}
       >
         <div className="text-3xl">🗑️</div>
-        <h2 className="font-display mt-2 text-lg font-semibold">ลบการ์ด “{label}” จริงดิ?</h2>
-        <p className="mt-1 text-sm text-[color:var(--ink-soft)]">ลบแล้ว หายไปเลยนะมึง</p>
+        <h2 className="font-display mt-2 text-lg font-semibold [overflow-wrap:anywhere]">{title}</h2>
+        <p className="mt-1 text-sm text-[color:var(--ink-soft)]">{message}</p>
         <div className="mt-4 flex justify-center gap-2">
           <button
             autoFocus

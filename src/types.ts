@@ -6,7 +6,7 @@ export type Card = {
   note?: string
 }
 
-export type Tier = { id: string; label: string; cardIds: string[] }
+export type Tier = { id: string; label: string; cardIds: string[]; color?: string }
 
 export type State = {
   title: string
