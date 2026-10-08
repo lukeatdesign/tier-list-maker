@@ -211,6 +211,22 @@ export default function App() {
   const [fileOver, setFileOver] = useState(false)
   const [fx, setFx] = useState<DropFx | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
+  // page width is a view preference: kept out of the board (and its JSON), remembered per browser
+  const [width, setWidth] = useState(() => {
+    try {
+      const n = Number(localStorage.getItem('tierlist.width'))
+      return n >= 640 && n <= 2400 ? n : 2400
+    } catch {
+      return 2400
+    }
+  })
+  useEffect(() => {
+    try {
+      localStorage.setItem('tierlist.width', String(width))
+    } catch {
+      /* ignore */
+    }
+  }, [width])
   const [confirmId, setConfirmId] = useState<string | null>(null)
   const [tierEditId, setTierEditId] = useState<string | null>(null)
   const [confirmTierId, setConfirmTierId] = useState<string | null>(null)
@@ -507,7 +523,7 @@ export default function App() {
   const tierVars = ['--tier-1', '--tier-2', '--tier-3', '--tier-4', '--tier-5']
 
   return (
-    <div className="mx-auto w-full max-w-[2400px] px-2 pb-12 pt-3">
+    <div className="mx-auto w-full px-2 pb-12 pt-3" style={{ maxWidth: width }}>
       <DndContext
         sensors={sensors}
         collisionDetection={collision}
@@ -518,6 +534,23 @@ export default function App() {
       >
       {/* menu bar: lives outside the export area */}
       <div className="flex flex-wrap items-center justify-end gap-2 px-3 pt-1">
+        <label
+          className="font-display flex items-center gap-2 rounded-full border-2 border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-1 text-xs text-[color:var(--ink-soft)]"
+          title="ปรับความกว้างของบอร์ด (มีผลกับขนาดรูปที่ export ด้วย)"
+        >
+          ↔
+          <input
+            type="range"
+            min={640}
+            max={2400}
+            step={20}
+            value={width}
+            onChange={(e) => setWidth(Number(e.target.value))}
+            aria-label="ความกว้างบอร์ด"
+            className="w-28 accent-[color:var(--accent)]"
+          />
+          <span className="w-12 text-right tabular-nums">{width >= 2400 ? 'เต็ม' : width}</span>
+        </label>
         <div
           data-no-export
           role="group"
